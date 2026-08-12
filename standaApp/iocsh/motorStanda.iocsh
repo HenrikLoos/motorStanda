@@ -52,7 +52,7 @@ asynOctetSetOutputEos("$(INSTANCE)_ETH",0,"\r")
 StandaCreateController("$(INSTANCE)", "$(INSTANCE)_ETH", $(NUM_AXES=8), $(MOVING_POLL=100), $(IDLE_POLL=1000))
 
 # The motor records can get their prefix from the environment variable
-dbLoadTemplate("$(SUB=$(MOTOR_STANDA)/iocsh/EXAMPLE_motorStanda.substitutions)", "P=$(PREFIX),PORT=$(INSTANCE)")
+dbLoadTemplate("$(SUB=$(MOTOR_STANDA)/standaApp/iocsh/EXAMPLE_motorStanda.substitutions)", "P=$(PREFIX),PORT=$(INSTANCE)")
 
 # Use the naming convention for asyn records from xxx so the displays can be used without modification
 dbLoadRecords("$(ASYN)/db/asynRecord.db","P=$(PREFIX),R=$(ASYN_RECORD=asyn_1),PORT=$(INSTANCE)_ETH,ADDR=0,OMAX=0,IMAX=0")

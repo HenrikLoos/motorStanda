@@ -1,2 +1,2 @@
 # Load motorStanda support will all the default macros
-iocshLoad("$(MOTOR_STANDA)/iocsh/motorStanda.iocsh", "INSTANCE=STANDA")
+iocshLoad("$(MOTOR_STANDA)/standaApp/iocsh/motorStanda.iocsh", "INSTANCE=STANDA,TCP_PORT=31337")
