@@ -1,0 +1,2 @@
+# Load motorStanda support will all the default macros
+iocshLoad("$(MOTOR_STANDA)/iocsh/motorStanda.iocsh", "INSTANCE=STANDA")

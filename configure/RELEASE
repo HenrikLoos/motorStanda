@@ -1,0 +1,6 @@
+# RELEASE - Location of external support modules
+
+# Use motor/module's generated release file when buidling inside motor
+-include $(TOP)/../RELEASE.$(EPICS_HOST_ARCH).local
+# Use motorStanda's RELEASE.local when building outside motor
+-include $(TOP)/configure/RELEASE.local
