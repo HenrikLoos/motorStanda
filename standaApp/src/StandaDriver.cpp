@@ -6,6 +6,7 @@ USAGE...      Standa motor driver support
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <math.h>
 
 #include <iocsh.h>
@@ -205,6 +206,28 @@ asynStatus StandaController::writeReadStanda(size_t outChars, size_t inChars)
 }
 
 
+/** Assenble output string from integer inputs */
+size_t concatIntList(char* dest, int count, ...)
+{
+  va_list args;
+  va_start(args, count);
+
+  char* ptr = dest;
+//  printf("%d ", count);
+
+  for (int i = 0; i < count; i++) {
+    size_t len = va_arg(args, size_t);
+    uint64_t val = va_arg(args, uint64_t);
+//    printf("%d %ld ", len, val);
+    memcpy(ptr, &val, len);
+    ptr += len;
+  }
+//  printf("\n");
+  va_end(args);
+  return (size_t)(ptr - dest);
+}
+
+
 /******************************************
  * These are the StandaAxis methods *
  ******************************************/
@@ -341,7 +364,7 @@ asynStatus StandaAxis::move(double position, int relative, double minVelocity, d
   // static const char *functionName = "StandaAxis::move";
   int32_t pos;
   int16_t upos;
-  int16_t reserved;
+  int16_t zero;
 
   //status = sendAccelAndVelocity(acceleration, maxVelocity, minVelocity);
   
@@ -353,22 +376,17 @@ asynStatus StandaAxis::move(double position, int relative, double minVelocity, d
     //sprintf(pC_->outString_, "%d MV %d", axisIndex_, NINT(position));
     sprintf(pC_->outString_, "move");
   }
+
   pos = NINT(position);
   upos = 0;
-  reserved = 0;
-  memcpy(pC_->outString_ + 4, &pos, 4);
-  memcpy(pC_->outString_ + 8, &upos, 2);
-  memcpy(pC_->outString_ + 10, &reserved, 2);
-  memcpy(pC_->outString_ + 12, &reserved, 2);
-  memcpy(pC_->outString_ + 14, &reserved, 2);
-
-//  concatIntList(pC_->outString_ + 4, 5, 4, pos, 2, upos, 2, reserved, 2, reserved, 2, reserved);
+  zero = 0;
+  concatIntList(pC_->outString_ + 4, 5, 4, pos, 2, upos, 2, zero, 2, zero, 2, zero);
 
   //status = pC_->writeReadController();
   status = pC_->writeReadStanda(18, 4);
 
   // If controller has a "go" command, send it here
-  
+
   return status;
 }
 
