@@ -130,6 +130,81 @@ StandaAxis* StandaController::getAxis(int axisNo)
 }
 
 
+/** CRC Calculation */
+unsigned short CRC16(uint8_t *pbuf, unsigned short n)
+{
+  unsigned short crc, i, j, carry_flag, a;
+  crc = 0xffff;
+  for(i = 0; i < n; i++)
+  {
+    crc = crc ^ pbuf[i];
+    for(j = 0; j < 8; j++)
+    {
+      a = crc;
+      carry_flag = a & 0x0001;
+      crc = crc >> 1;
+      if ( carry_flag == 1 ) crc = crc ^ 0xa001;
+    }
+  }
+  return crc;
+}
+
+
+/** Writes a string to the controller and reads a response.
+  * \param[in] output Pointer to the output string.
+  * \param[in] outChars Number of bytes in the output buffer to send.
+  * \param[out] input Pointer to the input string location.
+  * \param[in] maxChars Number of bytes to read into the input buffer.
+  * \param[out] nread Number of characters read.
+  * \param[out] timeout Timeout before returning an error.*/
+asynStatus StandaController::writeReadControllerNBytes(const char *output, size_t outChars, char *input, 
+                                                    size_t maxChars, size_t *nread, double timeout)
+{
+  size_t nwrite;
+  asynStatus status;
+  int eomReason;
+  // const char *functionName="writeReadControllerNBytes";
+  
+  status = pasynOctetSyncIO->writeRead(pasynUserController_, output,
+                                       outChars, input, maxChars, timeout,
+                                       &nwrite, nread, &eomReason);
+
+  return status;
+}
+
+
+/** Writes N bytes string to the Standa controller and reads N bytes response.
+  * Calls writeReadControllerNBytes() with default locations of the input and
+  * output strings and default timeout.
+  * Puts CRC into last two bytes, N bytes to write includes CRC bytes */
+asynStatus StandaController::writeReadStanda(size_t outChars, size_t inChars)
+{
+  asynStatus status;
+  size_t nread;
+  uint16_t crc;
+  uint16_t crcIn;
+
+  // Add CRC if outChars > 4
+  if (outChars > 4) {
+    crc = CRC16((unsigned char*)outString_ + 4, outChars - 6);
+    memcpy(outString_ + outChars - 2, &crc, 2);
+  }
+
+  status = writeReadControllerNBytes(outString_, outChars, inString_, inChars, &nread, DEFAULT_CONTROLLER_TIMEOUT);
+
+  // Test CRC if inChars > 4
+  if (inChars > 4) {
+    crc = CRC16((unsigned char*)inString_ + 4, inChars - 6);
+    crcIn = *(uint16_t*)(inString_ + inChars - 2);
+    if (crc != crcIn) {
+      status = asynError;
+    }
+  }
+
+  return status;
+}
+
+
 /******************************************
  * These are the StandaAxis methods *
  ******************************************/
@@ -264,16 +339,33 @@ asynStatus StandaAxis::move(double position, int relative, double minVelocity, d
 {
   asynStatus status;
   // static const char *functionName = "StandaAxis::move";
+  int32_t pos;
+  int16_t upos;
+  int16_t reserved;
 
-  status = sendAccelAndVelocity(acceleration, maxVelocity, minVelocity);
+  //status = sendAccelAndVelocity(acceleration, maxVelocity, minVelocity);
   
   // Set the target position
   if (relative) {
-    sprintf(pC_->outString_, "%d MR %d", axisIndex_, NINT(position));
+    //sprintf(pC_->outString_, "%d MR %d", axisIndex_, NINT(position));
+    sprintf(pC_->outString_, "movr");
   } else {
-    sprintf(pC_->outString_, "%d MV %d", axisIndex_, NINT(position));
+    //sprintf(pC_->outString_, "%d MV %d", axisIndex_, NINT(position));
+    sprintf(pC_->outString_, "move");
   }
-  status = pC_->writeReadController();
+  pos = NINT(position);
+  upos = 0;
+  reserved = 0;
+  memcpy(pC_->outString_ + 4, &pos, 4);
+  memcpy(pC_->outString_ + 8, &upos, 2);
+  memcpy(pC_->outString_ + 10, &reserved, 2);
+  memcpy(pC_->outString_ + 12, &reserved, 2);
+  memcpy(pC_->outString_ + 14, &reserved, 2);
+
+//  concatIntList(pC_->outString_ + 4, 5, 4, pos, 2, upos, 2, reserved, 2, reserved, 2, reserved);
+
+  //status = pC_->writeReadController();
+  status = pC_->writeReadStanda(18, 4);
 
   // If controller has a "go" command, send it here
   
@@ -318,10 +410,22 @@ asynStatus StandaAxis::moveVelocity(double minVelocity, double maxVelocity, doub
   //static const char *functionName = "StandaAxis::moveVelocity";
 
   // Call this to set the max current and acceleration
-  status = sendAccelAndVelocity(acceleration, maxVelocity, minVelocity);
+  //status = sendAccelAndVelocity(acceleration, maxVelocity, minVelocity);
 
-  sprintf(pC_->outString_, "%d JOG %f", axisIndex_, maxVelocity);
-  status = pC_->writeReadController();
+  //sprintf(pC_->outString_, "%d JOG %f", axisIndex_, maxVelocity);
+  if (maxVelocity < 0)
+  {
+    // Send "left" command
+    sprintf(pC_->outString_, "left");
+  }
+  else
+  {
+    // Send "rigt" command
+    sprintf(pC_->outString_, "rigt");
+  }
+
+  //status = pC_->writeReadController();
+  status = pC_->writeReadStanda(4, 4);
   return status;
 }
 
@@ -338,8 +442,11 @@ asynStatus StandaAxis::stop(double acceleration)
   asynStatus status;
   //static const char *functionName = "StandaAxis::stop";
 
-  sprintf(pC_->outString_, "%d AB", axisIndex_);
-  status = pC_->writeReadController();
+  //sprintf(pC_->outString_, "%d AB", axisIndex_);
+  sprintf(pC_->outString_, "stop");
+//  sprintf(pC_->outString_, "sstp");
+  //status = pC_->writeReadController();
+  status = pC_->writeReadStanda(4, 4);
   return status;
 }
 
@@ -410,42 +517,66 @@ asynStatus StandaAxis::poll(bool *moving)
   int direction;
   int limit;
   asynStatus comStatus;
+  unsigned char* test;
+  int32_t pos;
+  int16_t upos;
+  int64_t encpos;
+  uint8_t stat;
 
   // Read the current motor position
-  sprintf(pC_->outString_, "%d POS?", axisIndex_);
-  comStatus = pC_->writeReadController();
+  //sprintf(pC_->outString_, "%d POS?", axisIndex_);
+  sprintf(pC_->outString_, "gpos");
+  //comStatus = pC_->writeReadController();
+  comStatus = pC_->writeReadStanda(4, 26);
   if (comStatus) 
     goto skip;
   // The response string is of the form "0.00000"
-  position = atof((const char *) &pC_->inString_);
+  test = (unsigned char *) &pC_->inString_;
+  pos = *(int32_t*)(test + 4);
+  upos = *(int16_t*)(test + 8);
+  encpos = *(int64_t*)(test + 10);
+  //position = atof((const char *) &pC_->inString_);
+  position = pos;
   setDoubleParam(pC_->motorPosition_, position);
 
   // Read the current feedback position
-  sprintf(pC_->outString_, "%d FBK?", axisIndex_);
-  comStatus = pC_->writeReadController();
-  if (comStatus) 
-    goto skip;
+  //sprintf(pC_->outString_, "%d FBK?", axisIndex_);
+  //comStatus = pC_->writeReadController();
+  //if (comStatus) 
+  //  goto skip;
   // The response string is of the form "0.00000"
-  position = atof((const char *) &pC_->inString_);
+  //position = atof((const char *) &pC_->inString_);
+  position = encpos;
   setDoubleParam(pC_->motorEncoderPosition_, position);
 
   // Read the moving status of this motor
-  sprintf(pC_->outString_, "%d ST?", axisIndex_);
-  comStatus = pC_->writeReadController();
+  //sprintf(pC_->outString_, "%d ST?", axisIndex_);
+  sprintf(pC_->outString_, "gets");
+  //comStatus = pC_->writeReadController();
+  comStatus = pC_->writeReadStanda(4, 54);
   if (comStatus) 
     goto skip;
   // The response string is of the form "1"
-  status = atoi((const char *) &pC_->inString_);
+  //status = atoi((const char *) &pC_->inString_);
+  test = (unsigned char *) &pC_->inString_;
+//  stat = *(test + 4);
+//  printf("%i\n", stat);
+  stat = *(test + 5);
+//  printf("%i\n", stat);
+  status = stat;
 
   // Read the direction
-  direction = (status & 0x1) ? 1 : 0;
+  //direction = (status & 0x1) ? 1 : 0;
+  direction = 0;
   setIntegerParam(pC_->motorStatusDirection_, direction);
 
   // Read the moving status
-  done = (status & 0x2) ? 1 : 0;
+  //done = (status & 0x2) ? 1 : 0;
+  done = (status & 0x80) ? 0 : 1;
   setIntegerParam(pC_->motorStatusDone_, done);
   setIntegerParam(pC_->motorStatusMoving_, !done);
   *moving = done ? false:true;
+  goto skip;
 
   // Read the limit status
   limit = (status & 0x8) ? 1 : 0;

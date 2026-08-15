@@ -47,6 +47,11 @@ public:
 
 //private:
 //  char buff_[BUFF_SIZE];
-  
+
+  protected:
+  /* These are functions implementing the Standa controller communication protocol */
+  asynStatus writeReadControllerNBytes(const char *output, size_t outChars, char *response, size_t maxResponseLen, size_t *responseLen, double timeout);
+  asynStatus writeReadStanda(size_t outChars, size_t maxResponseLen);
+
 friend class StandaAxis;
 };
