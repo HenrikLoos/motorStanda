@@ -401,16 +401,16 @@ asynStatus StandaAxis::move(double position, int relative, double minVelocity, d
  *     acceleration (step/s/s) = (maxVelocity - minVelocity) / ACCL
  *     forwards = 1 if HOMF was pressed, 0 if HOMR was pressed
  */
-/*
+
 asynStatus StandaAxis::home(double minVelocity, double maxVelocity, double acceleration, int forwards)
 {
+  asynStatus status;
   // static const char *functionName = "StandaAxis::home";
 
-  // Homing isn't currently implemented
-
-  return asynSuccess;
+  sprintf(pC_->outString_, "home");
+  status = pC_->writeReadStanda(4, 4);
+  return status;
 }
-*/
 
 
 /*
@@ -480,9 +480,27 @@ asynStatus StandaAxis::setPosition(double position)
 {
   asynStatus status;
   //static const char *functionName = "StandaAxis::setPosition";
+  int32_t pos;
+  int16_t upos;
+  int64_t encpos;
+  uint8_t posflags;
+  uint8_t zero8;
+  uint16_t zero16;
+  uint32_t zero32;
 
-  sprintf(pC_->outString_, "%d POS %d", axisIndex_, NINT(position));
-  status = pC_->writeReadController();
+  //sprintf(pC_->outString_, "%d POS %d", axisIndex_, NINT(position));
+  sprintf(pC_->outString_, "spos");
+  pos = NINT(position);
+  upos = 0;
+  encpos = pos;
+  posflags = 0; // Flags set to 0 to both reload motor and encoder position
+  zero8 = 0;
+  zero16 = 0;
+  zero32 = 0;
+  concatIntList(pC_->outString_ + 4, 6, 4, pos, 2, upos, 8, encpos, 1, posflags, 1, zero8, 4, zero32);
+
+  //status = pC_->writeReadController();
+  status = pC_->writeReadStanda(26, 4);
   return status;
 }
 
