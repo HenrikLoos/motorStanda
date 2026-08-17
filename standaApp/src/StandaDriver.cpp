@@ -23,6 +23,18 @@ USAGE...      Standa motor driver support
 #define NINT(f) (int)((f)>0 ? (f)+0.5 : (f)-0.5)
 
 
+typedef struct __attribute__((packed)) {
+    char cmd[4];
+    int32_t  position;
+    uint16_t uPosition;
+    int64_t encPosition;
+    uint8_t posFlags;
+    uint8_t reserved1;
+    uint32_t reserved2;
+    uint16_t crc;
+} position_data_t;
+
+
 /************************************************
  * These are the StandaController methods *
  ************************************************/
@@ -487,9 +499,11 @@ asynStatus StandaAxis::setPosition(double position)
   uint8_t zero8;
   uint16_t zero16;
   uint32_t zero32;
+  position_data_t *pData;
 
   //sprintf(pC_->outString_, "%d POS %d", axisIndex_, NINT(position));
   sprintf(pC_->outString_, "spos");
+  pData = (position_data_t *)&pC_->outString_;
   pos = NINT(position);
   upos = 0;
   encpos = pos;
@@ -497,7 +511,13 @@ asynStatus StandaAxis::setPosition(double position)
   zero8 = 0;
   zero16 = 0;
   zero32 = 0;
-  concatIntList(pC_->outString_ + 4, 6, 4, pos, 2, upos, 8, encpos, 1, posflags, 1, zero8, 4, zero32);
+//  concatIntList(pC_->outString_ + 4, 6, 4, pos, 2, upos, 8, encpos, 1, posflags, 1, zero8, 4, zero32);
+  pData->position = NINT(position);
+  pData->uPosition = 0;
+  pData->encPosition = NINT(position);
+  pData->posFlags = 0;
+  pData->reserved1 = 0;
+  pData->reserved2 = 0;
 
   //status = pC_->writeReadController();
   status = pC_->writeReadStanda(26, 4);
@@ -554,10 +574,11 @@ asynStatus StandaAxis::poll(bool *moving)
   int limit;
   asynStatus comStatus;
   unsigned char* test;
-  int32_t pos;
-  int16_t upos;
-  int64_t encpos;
+//  int32_t pos;
+//  int16_t upos;
+//  int64_t encpos;
   uint8_t stat;
+  position_data_t *pData;
 
   // Read the current motor position
   //sprintf(pC_->outString_, "%d POS?", axisIndex_);
@@ -567,12 +588,12 @@ asynStatus StandaAxis::poll(bool *moving)
   if (comStatus) 
     goto skip;
   // The response string is of the form "0.00000"
-  test = (unsigned char *) &pC_->inString_;
-  pos = *(int32_t*)(test + 4);
-  upos = *(int16_t*)(test + 8);
-  encpos = *(int64_t*)(test + 10);
+
+//  test = (unsigned char *) &pC_->inString_;
+//  pos = *(int32_t*)(test + 4);
   //position = atof((const char *) &pC_->inString_);
-  position = pos;
+  pData = (position_data_t *)&pC_->inString_;
+  position = pData->position;
   setDoubleParam(pC_->motorPosition_, position);
 
   // Read the current feedback position
@@ -582,7 +603,7 @@ asynStatus StandaAxis::poll(bool *moving)
   //  goto skip;
   // The response string is of the form "0.00000"
   //position = atof((const char *) &pC_->inString_);
-  position = encpos;
+  position = pData->encPosition;
   setDoubleParam(pC_->motorEncoderPosition_, position);
 
   // Read the moving status of this motor
