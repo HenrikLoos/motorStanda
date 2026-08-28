@@ -22,7 +22,62 @@ USAGE...      Standa motor driver support
 
 #define NINT(f) (int)((f)>0 ? (f)+0.5 : (f)-0.5)
 
+/****************************************************
+ * These are the StandaController data packet types *
+ ****************************************************/
 
+/* Get and set position data */
+typedef struct __attribute__((packed)) {
+    char cmd[4];
+    int32_t  position;   //
+    uint16_t uPosition;  //
+    int64_t encPosition; //
+    uint8_t posFlags;    //
+    uint8_t reserved1;
+    uint32_t reserved2;
+    uint16_t crc;
+} position_data_t;
+
+/* Status data */
+typedef struct __attribute__((packed)) {
+    char cmd[4];
+    uint8_t moveSts;
+    uint8_t moveCmdSts;
+    uint8_t pwrSts;
+    uint8_t encSts;
+    uint8_t windSts;
+    int32_t curPosition;   //
+    int16_t uCurPosition;  //
+    int64_t encPosition; //
+    int32_t curSpeed;   //
+    int16_t uCurSpeed;  //
+    int16_t iPwr;
+    int16_t uPwr;
+    int16_t iUsb;
+    int16_t uUsb;
+    int16_t curT;
+    uint32_t flags;
+    uint32_t gpioFlags;
+    uint8_t cmdBufFreeSpace;
+    uint32_t reserved1;
+    uint16_t crc;
+} status_data_t;
+
+/* Get and set speed and accel data */
+typedef struct __attribute__((packed)) {
+    char cmd[4];
+    uint32_t  speed;        // target speed steps/s
+    uint8_t uSpeed;         // u-step speed
+    uint16_t accel;         // steps/s^2
+    uint16_t decel;         // steps/s^2
+    uint32_t antiplaySpeed; // antiplay mode speed steps/s
+    uint8_t uAntiplaySpeed; // antiplay mode u-step speed
+    uint16_t reserved1;
+    uint64_t reserved2;
+    uint16_t crc;
+} speed_data_t;
+
+/* Movement data */
 typedef struct __attribute__((packed)) {
     char cmd[4];
     int32_t  position;
@@ -32,7 +87,41 @@ typedef struct __attribute__((packed)) {
     uint8_t reserved1;
     uint32_t reserved2;
     uint16_t crc;
-} position_data_t;
+} move_data_t;
+
+/* Engine data */
+typedef struct __attribute__((packed)) {
+    char cmd[4];
+    uint16_t nomVoltage;
+    uint16_t nomCurrent;
+    uint32_t nomSpeed;
+    uint8_t uNomSpeed;
+    uint16_t engineFlags;
+    int16_t antiplay;
+    uint8_t microstepMode;
+    uint16_t stepsPerRev;
+    uint32_t reserved1;
+    uint64_t reserved2;
+    uint16_t crc;
+} engine_data_t;
+
+/* Accessories data */
+typedef struct __attribute__((packed)) {
+    char cmd[4];
+    char magneticBrakeInfo[24];
+    uint32_t brake1;
+    uint32_t brake2;
+    uint32_t brake3;
+    uint32_t brake4;
+    char temperatureSensorInfo[24];
+    uint32_t ts1;
+    uint32_t ts2;
+    uint32_t ts3;
+    uint32_t ts4;
+    uint32_t limitSwitchSettings;
+    char reserved[24];
+    uint16_t crc;
+} access_data_t;
 
 
 /************************************************
@@ -258,12 +347,27 @@ StandaAxis::StandaAxis(StandaController *pC, int axisNo)
     pC_(pC)
 {
   //asynStatus status;
+  asynStatus status;
+  // static const char *functionName = "Standa::sendAccelAndVelocity";
+  engine_data_t *pData;
+  access_data_t *pDataAcc;
   
   axisIndex_ = axisNo + 1;
 
   /*
    * Axis-specific initialization can go here
    */
+
+  sprintf(pC_->outString_, "geng");
+  status = pC_->writeReadStanda(4, 30);
+  pData = (engine_data_t *)&pC_->inString_;
+  printf("%d, %d, %d, %d, %d, %d %d %d\n", pData->nomVoltage, pData->nomCurrent, pData->nomSpeed, pData->uNomSpeed, pData->engineFlags, pData->antiplay, pData->microstepMode, pData->stepsPerRev);
+
+  sprintf(pC_->outString_, "gacc");
+  status = pC_->writeReadStanda(4, 114);
+  pDataAcc = (access_data_t *)&pC_->inString_;
+  printf("%d\n", pDataAcc->limitSwitchSettings);
+
   
   // Zero the encoder position (this only appears to be a problem on windows)
   setDoubleParam(pC_->motorEncoderPosition_, 0.0);
@@ -343,7 +447,9 @@ asynStatus StandaAxis::sendAccelAndVelocity(double acceleration, double velocity
 {
   asynStatus status;
   // static const char *functionName = "Standa::sendAccelAndVelocity";
+  speed_data_t *pDataIn, *pData;
 
+/*
   // Send the base velocity
   sprintf(pC_->outString_, "%d BAS %f", axisIndex_, baseVelocity);
   status = pC_->writeReadController();
@@ -355,6 +461,29 @@ asynStatus StandaAxis::sendAccelAndVelocity(double acceleration, double velocity
   // Send the acceleration
   sprintf(pC_->outString_, "%d ACC %f", axisIndex_, acceleration);
   status = pC_->writeReadController();
+*/
+
+//  printf("%f, %f, %f\n", acceleration, velocity, baseVelocity);
+
+  // Get the present speed settings
+  sprintf(pC_->outString_, "gmov");
+  status = pC_->writeReadStanda(4, 30);
+  pDataIn = (speed_data_t *)&pC_->inString_;
+//  printf("%d, %d, %d, %d, %d, %d\n", pDataIn->speed, pDataIn->uSpeed, pDataIn->accel, pDataIn->decel, pDataIn->antiplaySpeed, pDataIn->uAntiplaySpeed);
+
+  // Copy present speed settings into output buffer
+  pData = (speed_data_t *)&pC_->outString_;
+  *pData = *pDataIn;
+
+  // Send the velocity and acceleration
+  sprintf(pC_->outString_, "smov");
+  pData->speed = NINT(abs(velocity));
+  pData->accel = NINT(acceleration);
+  pData->decel = NINT(acceleration*2.5); // deceleration at 2.5x acceleration
+  pData->reserved1 = 0;
+  pData->reserved2 = 0;
+  status = pC_->writeReadStanda(30, 4);
+//  printf("%d, %d, %d, %d, %d, %d\n", pData->speed, pData->uSpeed, pData->accel, pData->decel, pData->antiplaySpeed, pData->uAntiplaySpeed);
 
   return status;
 }
@@ -378,7 +507,7 @@ asynStatus StandaAxis::move(double position, int relative, double minVelocity, d
   int16_t upos;
   int16_t zero;
 
-  //status = sendAccelAndVelocity(acceleration, maxVelocity, minVelocity);
+  status = sendAccelAndVelocity(acceleration, maxVelocity, minVelocity);
   
   // Set the target position
   if (relative) {
@@ -440,7 +569,7 @@ asynStatus StandaAxis::moveVelocity(double minVelocity, double maxVelocity, doub
   //static const char *functionName = "StandaAxis::moveVelocity";
 
   // Call this to set the max current and acceleration
-  //status = sendAccelAndVelocity(acceleration, maxVelocity, minVelocity);
+  status = sendAccelAndVelocity(acceleration, maxVelocity, minVelocity);
 
   //sprintf(pC_->outString_, "%d JOG %f", axisIndex_, maxVelocity);
   if (maxVelocity < 0)
@@ -492,30 +621,15 @@ asynStatus StandaAxis::setPosition(double position)
 {
   asynStatus status;
   //static const char *functionName = "StandaAxis::setPosition";
-  int32_t pos;
-  int16_t upos;
-  int64_t encpos;
-  uint8_t posflags;
-  uint8_t zero8;
-  uint16_t zero16;
-  uint32_t zero32;
   position_data_t *pData;
 
   //sprintf(pC_->outString_, "%d POS %d", axisIndex_, NINT(position));
   sprintf(pC_->outString_, "spos");
   pData = (position_data_t *)&pC_->outString_;
-  pos = NINT(position);
-  upos = 0;
-  encpos = pos;
-  posflags = 0; // Flags set to 0 to both reload motor and encoder position
-  zero8 = 0;
-  zero16 = 0;
-  zero32 = 0;
-//  concatIntList(pC_->outString_ + 4, 6, 4, pos, 2, upos, 8, encpos, 1, posflags, 1, zero8, 4, zero32);
   pData->position = NINT(position);
   pData->uPosition = 0;
   pData->encPosition = NINT(position);
-  pData->posFlags = 0;
+  pData->posFlags = 0; // Flags set to 0 to both reload motor and encoder position
   pData->reserved1 = 0;
   pData->reserved2 = 0;
 
@@ -579,6 +693,7 @@ asynStatus StandaAxis::poll(bool *moving)
 //  int64_t encpos;
   uint8_t stat;
   position_data_t *pData;
+  status_data_t *pDataStat;
 
   // Read the current motor position
   //sprintf(pC_->outString_, "%d POS?", axisIndex_);
@@ -620,7 +735,11 @@ asynStatus StandaAxis::poll(bool *moving)
 //  printf("%i\n", stat);
   stat = *(test + 5);
 //  printf("%i\n", stat);
-  status = stat;
+//  status = stat;
+  pDataStat = (status_data_t *)&pC_->inString_;
+  status = pDataStat->moveCmdSts;
+//  printf("%d %d %d %d %d %d %d %ld %d %d\n",pDataStat->moveSts, pDataStat->moveCmdSts, pDataStat->pwrSts, pDataStat->encSts, pDataStat->windSts, pDataStat->curPosition, pDataStat->uCurPosition, pDataStat->encPosition, pDataStat->curSpeed, pDataStat->uCurSpeed);
+//  printf("%d %d %d %d %d %d %d %d\n",pDataStat->iPwr, pDataStat->uPwr, pDataStat->iUsb, pDataStat->uUsb, pDataStat->curT, pDataStat->flags, pDataStat->gpioFlags, pDataStat->cmdBufFreeSpace);
 
   // Read the direction
   //direction = (status & 0x1) ? 1 : 0;

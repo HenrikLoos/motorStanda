@@ -3,7 +3,7 @@ file "$(MOTOR)/db/asyn_motor.db"
 {
 pattern
 {N,   M,       DTYP,         ADDR,  DESC,          EGU, DIR,  VELO,  VBAS,  ACCL,  BDST,  BVEL,  BACC,  MRES,  PREC,  DHLM,  DLLM,  INIT}
-{1,  "m$(N)",  "asynMotor",  0,     "motor $(N)",  deg,  Pos,  1,     .1,    .2,    0,     1,     .2,    0.0005,  4,     360,   -360,  ""}
+{1,  "m$(N)",  "asynMotor",  0,     "motor $(N)",  deg,  Pos,  0.3,   .0,     1,    0,     1,     .2,    0.0005,  4,     360,   -360,  ""}
 #{2,  "m$(N)",  "asynMotor",  1,     "motor $(N)",  mm,  Pos,  1,     .1,    .2,    0,     1,     .2,    0.0025,  4,     100,   -100,  ""}
 #{3,  "m$(N)",  "asynMotor",  2,     "motor $(N)",  mm,  Pos,  1,     .1,    .2,    0,     1,     .2,    0.0025,  4,     100,   -100,  ""}
 #{4,  "m$(N)",  "asynMotor",  3,     "motor $(N)",  mm,  Pos,  1,     .1,    .2,    0,     1,     .2,    0.0025,  4,     100,   -100,  ""}
