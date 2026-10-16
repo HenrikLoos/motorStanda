@@ -32,6 +32,7 @@ private:
                                    *   Abbreviated because it is used very frequently */
   int axisIndex_;
   //double stepsSize_;
+  int limitSwitchSettings_;
   asynStatus sendAccelAndVelocity(double accel, double velocity, double baseVelocity);
   
 friend class StandaController;
