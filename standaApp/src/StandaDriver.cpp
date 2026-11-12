@@ -356,7 +356,7 @@ StandaAxis::StandaAxis(StandaController *pC, int axisNo)
   sprintf(pC_->outString_, "geng");
   status = pC_->writeReadStanda(4, 30);
   pData = (engine_data_t *)&pC_->inString_;
-  printf("%d, %d, %d, %d, %d, %d %d %d\n", pData->nomVoltage, pData->nomCurrent, pData->nomSpeed, pData->uNomSpeed, pData->engineFlags, pData->antiplay, pData->microstepMode, pData->stepsPerRev);
+  printf("nom voltage: %d, nom current: %d, nom speed: %d, nom uSpeed %d, engine flags: %d, antiplay: %d, ustep mode: %d, steps/rev: %d\n", pData->nomVoltage, pData->nomCurrent, pData->nomSpeed, pData->uNomSpeed, pData->engineFlags, pData->antiplay, pData->microstepMode, pData->stepsPerRev);
 
   sprintf(pC_->outString_, "geds");
   status = pC_->writeReadStanda(4, 26);
@@ -659,8 +659,10 @@ asynStatus StandaAxis::poll(bool *moving)
   int status;
   int done;
   int direction;
-  int limit;
+  int limitH;
+  int limitL;
   int homed;
+  int atHome;
   asynStatus comStatus;
   position_data_t *pData;
   status_data_t *pDataStat;
@@ -689,7 +691,7 @@ asynStatus StandaAxis::poll(bool *moving)
   status = pDataStat->moveCmdSts;
 //  printf("moveSts: %d, moveCmdSts: %d, pwrSts: %d, encSts: %d, windSts: %d\n",pDataStat->moveSts, pDataStat->moveCmdSts, pDataStat->pwrSts, pDataStat->encSts, pDataStat->windSts);
 //  printf("curPos: %d, uCurPos: %d, encPos: %ld, curSpeed: %d, uCurSpeed: %d\n",pDataStat->curPosition, pDataStat->uCurPosition, pDataStat->encPosition, pDataStat->curSpeed, pDataStat->uCurSpeed);
-//  printf("iPwr: %d, uPwr: %d, iUsb: %d, uUsb: %d, curT: %d, flags: %d, gpioFl: %d, cmdBuff: %d\n",pDataStat->iPwr, pDataStat->uPwr, pDataStat->iUsb, pDataStat->uUsb, pDataStat->curT, pDataStat->flags, pDataStat->gpioFlags, pDataStat->cmdBufFreeSpace);
+//  printf("iPwr: %d, uPwr: %d, iUsb: %d, uUsb: %d, curT: %d, flags: 0x%x, gpioFl: 0x%x, cmdBuff: %d\n",pDataStat->iPwr, pDataStat->uPwr, pDataStat->iUsb, pDataStat->uUsb, pDataStat->curT, pDataStat->flags, pDataStat->gpioFlags, pDataStat->cmdBufFreeSpace);
 
   // Read the direction
   //direction = (status & 0x1) ? 1 : 0;
@@ -704,10 +706,17 @@ asynStatus StandaAxis::poll(bool *moving)
 
   // Read the limit status
   status = pDataStat->gpioFlags;
-  limit = (status & 0x1) ? 1 : 0;
-  setIntegerParam(pC_->motorStatusHighLimit_, limit);
-  limit = (status & 0x2) ? 1 : 0;
-  setIntegerParam(pC_->motorStatusLowLimit_, limit);
+  limitH = (status & 0x1) ? 1 : 0;
+  limitL = (status & 0x2) ? 1 : 0;
+  atHome = limitH && limitL;
+  if (atHome)
+  {
+    limitH = 0;
+    limitL = 0;
+  }
+  setIntegerParam(pC_->motorStatusHighLimit_, limitH);
+  setIntegerParam(pC_->motorStatusLowLimit_, limitL);
+  setIntegerParam(pC_->motorStatusAtHome_, atHome);
 
   // Read the home status
   status = pDataStat->flags;
